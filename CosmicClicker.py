@@ -1067,6 +1067,7 @@ class Game:
         self.combo_timer=0.0; self.combo_decay=0.8; self.clicks=0; self.auto_timer=0.0
         self.chaos_energy=0.0; self.prestige_count=0; self.chaos_mult=1.0
         self.play_time=0.0
+        self.galaxy_boost = 0.0
 
         self.upgrades=[UpgradeState(d) for d in UPGRADE_DEFS]
 
@@ -1140,19 +1141,19 @@ class Game:
     def has(self,name): return self.ulv(name)>0
 
     def click_power(self):
-        base=1.0; mult=1.0
-        base+=self.upow("Click Power")*self.ulv("Click Power")  # now flat per level
-        if self.has("Power Fist"): mult*=self.upow("Power Fist")
-        if self.has("Double Tap"): mult*=self.upow("Double Tap")
-        if self.has("Cosmic Finger"): mult*=self.upow("Cosmic Finger")
-        if self.has("Reality Tap"): mult*=self.upow("Reality Tap")
-        if self.has("Omega Click"): mult*=self.upow("Omega Click")
-        if self.has("Universe Engine"): mult*=self.upow("Universe Engine")
-        combo_m=1+min(self.combo,1000)*0.005
-        # Universal upgrade multiplier: each level gives +1%
+        base = 1.0; mult = 1.0
+        base += self.upow("Click Power") * self.ulv("Click Power")
+        if self.has("Power Fist"): mult *= self.upow("Power Fist")
+        if self.has("Double Tap"): mult *= self.upow("Double Tap")
+        if self.has("Cosmic Finger"): mult *= self.upow("Cosmic Finger")
+        if self.has("Reality Tap"): mult *= self.upow("Reality Tap")
+        if self.has("Omega Click"): mult *= self.upow("Omega Click")
+        if self.has("Universe Engine"): mult *= self.upow("Universe Engine")
+        combo_m = 1 + min(self.combo, 1000) * 0.005
         upgrade_mult = 1.0 + 0.01 * sum(u.level for u in self.upgrades)
-        return base * mult * combo_m * self.chaos_mult * self.energy_mult() * self.crystal_mult * upgrade_mult
-
+        galaxy_m = 1.0 + self.galaxy_boost
+        return base * mult * combo_m * self.chaos_mult * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()   # <-- added fury
+    
     def energy_mult(self):
         m=1.0
         # multiplier upgrades (categories "mult" and "cosmic") – each level multiplies by base_power
@@ -1166,13 +1167,14 @@ class Game:
         return m
 
     def auto_cps(self):
-        t=0
+        t = 0
         for n in ["Auto Clicker","Rapid Fire","Machine Gun","Turbo Engine","Infinity Trigger"]:
-            t+=self.upow(n)*self.ulv(n)
-        dim=self.upow("Dimension Fold") if self.has("Dimension Fold") else 1
-        temp=self.upow("Temporal Clicker")*self.ulv("Temporal Clicker") if self.has("Temporal Clicker") else 0
+            t += self.upow(n) * self.ulv(n)
+        dim = self.upow("Dimension Fold") if self.has("Dimension Fold") else 1
+        temp = self.upow("Temporal Clicker") * self.ulv("Temporal Clicker") if self.has("Temporal Clicker") else 0
         upgrade_mult = 1.0 + 0.01 * sum(u.level for u in self.upgrades)
-        return (t+temp) * self.chaos_mult * dim * self.energy_mult() * self.crystal_mult * upgrade_mult
+        galaxy_m = 1.0 + self.galaxy_boost
+        return (t + temp) * self.chaos_mult * dim * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()   # <-- added fury
 
     def chain_prob(self):
         b=0.0
@@ -1204,8 +1206,8 @@ class Game:
         total_levels=sum(u.level for u in self.upgrades)
         upgrade_fury=1.0+total_levels*0.01
         prestige_fury=1.0+self.prestige_count*0.15
-        combo_fury=1.0+min(self.max_combo,5000)*0.0005
-        live_fury=1.0+min(self.combo,2500)*0.0008
+        combo_fury = 1.0 + self.max_combo * 0.0005
+        live_fury = 1.0 + self.combo * 0.0008
         return upgrade_fury*prestige_fury*combo_fury*live_fury
 
     def vscale(self):
@@ -1752,6 +1754,7 @@ class Game:
             self.clicks=data.get("clicks",0); self.chaos_energy=data.get("chaos_energy",0)
             self.prestige_count=data.get("prestige_count",0)
             self.chaos_mult=data.get("chaos_mult",1); self.play_time=data.get("play_time",0)
+            self.galaxy_boost = data.get("galaxy_boost", 0)
             ulvs=data.get("upgrades",{})
             for u in self.upgrades: u.level=ulvs.get(u.name,0)
             self.save_msg="Game Loaded!"; self.save_msg_timer=2
@@ -2088,4 +2091,3 @@ class Game:
 if __name__=="__main__":
 
     Game().run()
-
