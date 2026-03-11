@@ -7,7 +7,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 
 Requirements: pip install pygame
-Run:          python cosmic_clicker.py
+Run:          python CosmicClicker.py
 
 Controls:
   Left-click game area  → trigger chain reactions
@@ -2088,3 +2088,4 @@ class Game:
 if __name__=="__main__":
 
     Game().run()
+
