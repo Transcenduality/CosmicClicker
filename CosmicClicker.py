@@ -53,7 +53,7 @@ CHAIN_DECAY = 0.78
 
 SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hyper_save.json")
 
-# Void Crystal settings (replaces Golden Cookie)
+# Void Crystal settings (replaces golden cookie placeholder)
 CRYSTAL_SPAWN_MIN = 30        # seconds
 CRYSTAL_SPAWN_MAX = 90
 CRYSTAL_LIFETIME = 10
@@ -849,7 +849,7 @@ class ScreenFlash(FX):
             overlay.fill((*self.color,min(255,a)))
             scr.blit(overlay,(0,0))
 
-# --- Void Crystal (replaces Golden Cookie) ---
+# --- Void Crystal (replaces golden cookie placeholder) ---
 class VoidCrystal(FX):
     __slots__ = FX.__slots__ + ['lifetime']
     def __init__(self):
@@ -1036,7 +1036,7 @@ class Game:
         self.time=0.0
         self.save_msg=""; self.save_msg_timer=0
 
-        # Void Crystal (replaces golden cookie)
+        # Void Crystal (replaces golden cookie placeholder)
         self.crystal = None
         self.crystal_spawn_timer = random.uniform(CRYSTAL_SPAWN_MIN, CRYSTAL_SPAWN_MAX)
         self.crystal_buff_timer = 0.0
@@ -1610,7 +1610,7 @@ class Game:
         ft.setup(x+random.gauss(0,5),y+random.gauss(0,5),text,color,font=self.font_md)
         self.texts.spawn(ft)
 
-    # ── Void Crystal handling (replaces golden cookie) ──
+    # ── Void Crystal handling (replaces golden cookie placeholder) ──
     def spawn_crystal(self):
         if self.crystal is not None:
             return
@@ -2086,4 +2086,5 @@ class Game:
         pygame.quit(); sys.exit()
 
 if __name__=="__main__":
+
     Game().run()
