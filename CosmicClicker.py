@@ -1206,8 +1206,8 @@ class Game:
         total_levels=sum(u.level for u in self.upgrades)
         upgrade_fury=1.0+total_levels*0.01
         prestige_fury=1.0+self.prestige_count*0.15
-        combo_fury = 1.0 + self.max_combo * 0.0005
-        live_fury = 1.0 + self.combo * 0.0008
+        combo_fury = 1.0 + self.max_combo * 0.00005
+        live_fury = 1.0 + self.combo * 0.00008
         return upgrade_fury*prestige_fury*combo_fury*live_fury
 
     def vscale(self):
@@ -2091,3 +2091,4 @@ class Game:
 if __name__=="__main__":
 
     Game().run()
+
