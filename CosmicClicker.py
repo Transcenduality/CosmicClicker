@@ -47,7 +47,7 @@ WIDTH, HEIGHT = 1280, 800
 BG = (2, 2, 8)
 
 MAX_CHAIN_DEPTH = 8
-MAX_FX = 2000                # comfortable limit
+MAX_FX = 800                # comfortable limit
 MAX_SPAWN = 40               # increased slightly for variety
 CHAIN_DECAY = 0.78
 
@@ -2091,4 +2091,5 @@ class Game:
 if __name__=="__main__":
 
     Game().run()
+
 
