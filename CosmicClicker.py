@@ -33,6 +33,9 @@ NEW in this mod:
   • Added three new FX types: Void Tendrils, Prism Beams, and Galactic Swirls.
   • These new FX are unlocked by and scale with the Void Engine, Prism Emitter, and Spiral Weaver upgrades.
   • Added a new color palette (PAL_GALAXY) for cosmic variety.
+  • Void Crystals now float and last longer (20s).
+  • Rare FX (Void Tendrils, Prism Beams, Galactic Swirls) have been visually enhanced.
+  • Many new upgrades added, with combo requirements scaling into the trillions.
 """
 
 import pygame, math, random, sys, json, os, time
@@ -47,7 +50,7 @@ WIDTH, HEIGHT = 1280, 800
 BG = (2, 2, 8)
 
 MAX_CHAIN_DEPTH = 8
-MAX_FX = 800                # comfortable limit
+MAX_FX = 800               # comfortable limit
 MAX_SPAWN = 40               # increased slightly for variety
 CHAIN_DECAY = 0.78
 
@@ -56,7 +59,7 @@ SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hyper_save
 # Void Crystal settings (replaces golden cookie placeholder)
 CRYSTAL_SPAWN_MIN = 30        # seconds
 CRYSTAL_SPAWN_MAX = 90
-CRYSTAL_LIFETIME = 10
+CRYSTAL_LIFETIME = 20         # increased from 10
 CRYSTAL_BUFF_DURATION = 5
 CRYSTAL_BUFF_MULT = 10
 
@@ -305,7 +308,6 @@ class Particle(FX):
             except: pass
         else:
             pygame.draw.circle(scr,c,(int(self.x),int(self.y)),sz)
-            pygame.draw.circle(scr,WHITE,(int(self.x),int(self.y)),max(1, min(2, sz//3)))
 
 class Explosion(FX):
     __slots__=FX.__slots__+['max_r','pal','ring','flash']
@@ -319,11 +321,9 @@ class Explosion(FX):
         if r<2: return
         c=palette_sample(self.pal,p)
         if self.flash and t>0.85:
-            pygame.draw.circle(scr,WHITE,(int(self.x),int(self.y)),r, max(1, int(r*0.1)))
             return
         if self.ring:
             th=max(1,int(r*0.15*t))
-            pygame.draw.circle(scr,c,(int(self.x),int(self.y)),r,th)
             if r>15:
                 scr.blit(glow_surf(r,c,t*0.3),(int(self.x)-r,int(self.y)-r),
                          special_flags=pygame.BLEND_ADD)
@@ -374,41 +374,46 @@ class PrismBurst(FX):
         scr.blit(glow_surf(min(int(r), 80),self.color,t*0.5),(int(self.x-min(r,80)),int(self.y-min(r,80))),special_flags=pygame.BLEND_ADD)
 
 class Starburst(FX):
-    __slots__=FX.__slots__+['radius','inner_ratio','points','rot','speed']
+    """Swirling stars around a centre – clean and simple."""
+    __slots__ = FX.__slots__ + ['stars', 'rot_speed', 'angle']
     def __init__(self):
         super().__init__()
-        self.radius=20
-        self.inner_ratio=0.5
-        self.points=5
-        self.rot=0
-        self.speed=2
-    def setup(self,x,y,radius=20,points=5,inner_ratio=0.5,life=1.0,color=PINK,depth=0):
-        self.init(x,y,depth)
-        self.radius=radius
-        self.inner_ratio=inner_ratio
-        self.points=points
-        self.life=self.max_life=life
-        self.color=color
-        self.rot=random.uniform(0,6.28)
-        self.speed=random.uniform(1,3)
+        self.stars = []      # each: (angle_offset, radius_offset, size, speed_factor)
+        self.rot_speed = 0
+        self.angle = 0
+    def setup(self, x, y, radius=20, points=5, inner_ratio=0.5, life=1.0, color=PINK, depth=0):
+        # inner_ratio is ignored; points determines number of stars
+        self.init(x, y, depth)
+        self.life = self.max_life = life
+        self.color = color
+        self.rot_speed = random.uniform(1, 3)          # radians per second
+        self.angle = random.uniform(0, 2*math.pi)      # initial rotation
+        num_stars = max(6, points * 2)                 # plenty of stars
+        self.stars = []
+        for _ in range(num_stars):
+            angle_off = random.uniform(0, 2*math.pi)
+            r_off = radius * random.uniform(0.7, 1.3)  # vary orbit radius
+            size = random.uniform(2, 4)
+            speed_factor = random.uniform(0.8, 1.2)    # vary rotation speed
+            self.stars.append([angle_off, r_off, size, speed_factor])
         return self
-    def update(self,dt):
-        self.rot+=self.speed*dt
+    def update(self, dt):
+        self.angle += self.rot_speed * dt
         super().update(dt)
-    def draw(self,scr):
-        t=self.t()
-        r=self.radius*t
-        if r<2: return
-        pts=[]
-        for i in range(self.points*2):
-            angle = self.rot + i*math.pi/self.points
-            rad = r * (self.inner_ratio if i%2 else 1.0)
-            pts.append((self.x+math.cos(angle)*rad, self.y+math.sin(angle)*rad))
-        c=clamp_color((self.color[0]*t, self.color[1]*t, self.color[2]*t))
-        pygame.draw.polygon(scr, c, pts, max(1,int(2*t)))
-        scr.blit(glow_surf(min(int(r*1.2), 80), self.color, t*0.5),
-                 (int(self.x - min(r*1.2,80)), int(self.y - min(r*1.2,80))),
-                 special_flags=pygame.BLEND_ADD)
+    def draw(self, scr):
+        t = self.t()
+        if t <= 0:
+            return
+        for off, r, sz, sp in self.stars:
+            # star position (rotated)
+            a = self.angle * sp + off
+            px = self.x + math.cos(a) * r
+            py = self.y + math.sin(a) * r
+            # size fades with life
+            draw_sz = max(1, int(sz * t))
+            # color fades
+            c = clamp_color((self.color[0]*t, self.color[1]*t, self.color[2]*t))
+            pygame.draw.circle(scr, c, (int(px), int(py)), draw_sz)
 
 class Nebula(FX):
     __slots__=FX.__slots__+['max_r','drift_x','drift_y']
@@ -538,7 +543,6 @@ class Meteor(FX):
             c=clamp_color((self.color[0]*f*t,self.color[1]*f*t,self.color[2]*f*t))
             pygame.draw.circle(scr,c,(int(tx),int(ty)),r)
         sz=max(1,int(self.size*t))
-        pygame.draw.circle(scr,WHITE,(int(self.x),int(self.y)),max(1, min(2, sz//3)))
         scr.blit(glow_surf(min(sz*3, 60),self.color,t),(int(self.x)-min(sz*3,60),int(self.y)-min(sz*3,60)),
                  special_flags=pygame.BLEND_ADD)
 
@@ -568,7 +572,6 @@ class Comet(FX):
         sz=max(2,int(self.size*t))
         scr.blit(glow_surf(min(sz*4, 80),self.color,t*0.8),(int(self.x)-min(sz*4,80),int(self.y)-min(sz*4,80)),
                  special_flags=pygame.BLEND_ADD)
-        pygame.draw.circle(scr,WHITE,(int(self.x),int(self.y)),max(1, min(2, sz//3)))
 
 class OrbitStar(FX):
     __slots__=FX.__slots__+['cx','cy','orbit_r','angle','speed','sz']
@@ -589,7 +592,6 @@ class OrbitStar(FX):
         scr.blit(glow_surf(min(sz*3, 50),self.color,t*0.6),(int(self.x)-min(sz*3,50),int(self.y)-min(sz*3,50)),
                  special_flags=pygame.BLEND_ADD)
         pygame.draw.circle(scr,self.color,(int(self.x),int(self.y)),sz)
-        pygame.draw.circle(scr,WHITE,(int(self.x),int(self.y)),max(1, min(2, sz//3)))
 
 class FloatText(FX):
     __slots__=FX.__slots__+['text','font']
@@ -659,8 +661,6 @@ class CosmicRift(FX):
         pulse=0.5+0.5*math.sin(self.life*15)
         th=max(1,int(self.thick*t*pulse+2*t))
         c=clamp_color((self.color[0]*t,self.color[1]*t,self.color[2]*t))
-        pygame.draw.line(scr,c,(int(x1),int(y1)),(int(x2),int(y2)),th+2)
-        pygame.draw.line(scr,WHITE,(int(x1),int(y1)),(int(x2),int(y2)),max(1,th-1))
         scr.blit(glow_surf(min(int(self.length*0.4), 70),self.color,t*0.5),
                  (int(self.x-min(self.length*0.4,70)),int(self.y-min(self.length*0.4,70))),
                  special_flags=pygame.BLEND_ADD)
@@ -738,15 +738,16 @@ class BlackHole(FX):
         scr.blit(glow_surf(min(r+5, 60),PURPLE,t*0.4),(int(self.x)-min(r+5,60),int(self.y)-min(r+5,60)),
                  special_flags=pygame.BLEND_ADD)
 
-# --- NEW FX CLASSES (added for variety) ---
+# --- ENHANCED RARE FX ---
 class VoidTendrils(FX):
     """Multiple dark tendrils reaching out from a point (unlocked by Void Engine)."""
-    __slots__ = FX.__slots__ + ['num_tendrils', 'length', 'angle']
+    __slots__ = FX.__slots__ + ['num_tendrils', 'length', 'angle', 'particles']
     def __init__(self):
         super().__init__()
         self.num_tendrils = 5
         self.length = 50
         self.angle = 0
+        self.particles = []  # store particle positions for each tendril
     def setup(self, x, y, num=5, length=50, life=1.0, color=VOID, depth=0):
         self.init(x, y, depth)
         self.num_tendrils = min(num, 8)
@@ -754,86 +755,147 @@ class VoidTendrils(FX):
         self.life = self.max_life = life
         self.color = color
         self.angle = random.uniform(0, 6.28)
+        # precompute particle positions along tendrils for smooth animation
+        self.particles = []
+        for i in range(self.num_tendrils):
+            tendril_particles = []
+            base_angle = self.angle + i * (2*math.pi/self.num_tendrils)
+            for j in range(5):
+                t = j / 4.0  # 0 to 1
+                px = x + math.cos(base_angle) * self.length * t
+                py = y + math.sin(base_angle) * self.length * t
+                tendril_particles.append((px, py))
+            self.particles.append(tendril_particles)
         return self
     def update(self, dt):
         self.angle += 2 * dt
+        # update particle positions based on angle and length
+        t_factor = self.t()
+        for i in range(self.num_tendrils):
+            base_angle = self.angle + i * (2*math.pi/self.num_tendrils)
+            for j, (_, _) in enumerate(self.particles[i]):
+                t = j / 4.0
+                self.particles[i][j] = (self.x + math.cos(base_angle) * self.length * t_factor * t,
+                                         self.y + math.sin(base_angle) * self.length * t_factor * t)
         super().update(dt)
     def draw(self, scr):
         t = self.t()
         for i in range(self.num_tendrils):
-            a = self.angle + i * (2*math.pi/self.num_tendrils)
-            end_x = self.x + math.cos(a) * self.length * t
-            end_y = self.y + math.sin(a) * self.length * t
+            base_angle = self.angle + i * (2*math.pi/self.num_tendrils)
+            end_x = self.x + math.cos(base_angle) * self.length * t
+            end_y = self.y + math.sin(base_angle) * self.length * t
             c = clamp_color((self.color[0]*t, self.color[1]*t, self.color[2]*t))
-            pygame.draw.line(scr, c, (int(self.x), int(self.y)), (int(end_x), int(end_y)), max(1, int(3*t)))
-            # small glow at tip
-            scr.blit(glow_surf(10, self.color, t*0.5), (int(end_x)-10, int(end_y)-10), special_flags=pygame.BLEND_ADD)
+            # draw particles along tendril
+            for j, (px, py) in enumerate(self.particles[i]):
+                sz = max(1, int(3 * t * (1 - j/5)))
+                pygame.draw.circle(scr, c, (int(px), int(py)), sz)
+            # glow at tip
+            scr.blit(glow_surf(12, self.color, t*0.8), (int(end_x)-12, int(end_y)-12), special_flags=pygame.BLEND_ADD)
 
 class PrismBeam(FX):
     """A central beam that splits into colored beams (unlocked by Prism Emitter)."""
-    __slots__ = FX.__slots__ + ['beams', 'angle', 'length']
+    __slots__ = FX.__slots__ + ['beams', 'angle', 'length', 'particles']
     def __init__(self):
         super().__init__()
         self.beams = 3
         self.angle = 0
         self.length = 60
+        self.particles = []
     def setup(self, x, y, beams=3, length=60, life=0.8, color=WHITE, depth=0):
         self.init(x, y, depth)
-        self.beams = min(beams, 5)
-        self.length = min(length, 80)
+        self.beams = min(beams, 7)  # increased max
+        self.length = min(length, 100)
         self.life = self.max_life = life
         self.color = color
         self.angle = random.uniform(0, 6.28)
+        # precompute particle positions
+        self.particles = []
+        for i in range(self.beams):
+            beam_particles = []
+            base_angle = self.angle + i * (2*math.pi/self.beams)
+            for j in range(4):
+                t = j / 3.0
+                px = x + math.cos(base_angle) * self.length * t
+                py = y + math.sin(base_angle) * self.length * t
+                beam_particles.append((px, py))
+            self.particles.append(beam_particles)
         return self
     def update(self, dt):
         self.angle += 4 * dt
+        t_factor = self.t()
+        for i in range(self.beams):
+            base_angle = self.angle + i * (2*math.pi/self.beams)
+            for j, (_, _) in enumerate(self.particles[i]):
+                t = j / 3.0
+                self.particles[i][j] = (self.x + math.cos(base_angle) * self.length * t_factor * t,
+                                         self.y + math.sin(base_angle) * self.length * t_factor * t)
         super().update(dt)
     def draw(self, scr):
         t = self.t()
-        pal = [RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PURPLE]
+        pal = [RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PURPLE, MAGENTA, PINK]
         for i in range(self.beams):
-            a = self.angle + i * (2*math.pi/self.beams)
-            end_x = self.x + math.cos(a) * self.length * t
-            end_y = self.y + math.sin(a) * self.length * t
+            base_angle = self.angle + i * (2*math.pi/self.beams)
+            end_x = self.x + math.cos(base_angle) * self.length * t
+            end_y = self.y + math.sin(base_angle) * self.length * t
             c = pal[i % len(pal)]
             c = clamp_color((c[0]*t, c[1]*t, c[2]*t))
-            pygame.draw.line(scr, c, (int(self.x), int(self.y)), (int(end_x), int(end_y)), max(1, int(4*t)))
-            scr.blit(glow_surf(12, c, t*0.6), (int(end_x)-12, int(end_y)-12), special_flags=pygame.BLEND_ADD)
-            
+            # draw particles along beam
+            for j, (px, py) in enumerate(self.particles[i]):
+                sz = max(1, int(4 * t * (1 - j/4)))
+                pygame.draw.circle(scr, c, (int(px), int(py)), sz)
+            # glow at tip
+            scr.blit(glow_surf(15, c, t*0.8), (int(end_x)-15, int(end_y)-15), special_flags=pygame.BLEND_ADD)
+
 class GalacticSwirl(FX):
     """A rotating spiral of particles (unlocked by Spiral Weaver)."""
-    __slots__ = FX.__slots__ + ['arms', 'radius', 'angle']
+    __slots__ = FX.__slots__ + ['arms', 'radius', 'angle', 'particles']
     def __init__(self):
         super().__init__()
         self.arms = 3
         self.radius = 40
         self.angle = 0
+        self.particles = []
     def setup(self, x, y, arms=3, radius=40, life=2.0, color=CYAN, depth=0):
         self.init(x, y, depth)
-        self.arms = min(arms, 5)
-        self.radius = min(radius, 70)
+        self.arms = min(arms, 8)  # increased max
+        self.radius = min(radius, 100)
         self.life = self.max_life = life
         self.color = color
         self.angle = random.uniform(0, 6.28)
+        # precompute particle positions for each arm
+        self.particles = []
+        for arm in range(self.arms):
+            arm_particles = []
+            base_angle = self.angle + arm * (2*math.pi/self.arms)
+            for j in range(20):  # more particles per arm
+                f = j / 19.0
+                a = base_angle + f * 8  # spiral factor
+                d = self.radius * f
+                px = x + math.cos(a) * d
+                py = y + math.sin(a) * d
+                arm_particles.append((px, py, f))  # store f for size/color
+            self.particles.append(arm_particles)
         return self
     def update(self, dt):
         self.angle += 3 * dt
+        t_factor = self.t()
+        for arm in range(self.arms):
+            base_angle = self.angle + arm * (2*math.pi/self.arms)
+            for j, (_, _, f) in enumerate(self.particles[arm]):
+                a = base_angle + f * 8
+                d = self.radius * f * t_factor
+                self.particles[arm][j] = (self.x + math.cos(a) * d, self.y + math.sin(a) * d, f)
         super().update(dt)
     def draw(self, scr):
         t = self.t()
-        r = self.radius * t
         for arm in range(self.arms):
-            base_a = self.angle + arm * (2*math.pi/self.arms)
-            for j in range(12):
-                f = j / 12
-                a = base_a + f * 8
-                d = r * f
-                px = self.x + math.cos(a) * d
-                py = self.y + math.sin(a) * d
-                sz = max(1, int(3 * t * (1 - f)))
+            for (px, py, f) in self.particles[arm]:
+                sz = max(1, int(5 * t * (1 - f*0.7)))
                 af = t * (1 - f*0.5)
                 c = clamp_color((self.color[0]*af, self.color[1]*af, self.color[2]*af))
                 pygame.draw.circle(scr, c, (int(px), int(py)), sz)
+                if f > 0.5:  # add glow to outer particles
+                    scr.blit(glow_surf(8, c, af*0.5), (int(px)-8, int(py)-8), special_flags=pygame.BLEND_ADD)
 
 class ScreenFlash(FX):
     __slots__=FX.__slots__+['intensity']
@@ -849,9 +911,9 @@ class ScreenFlash(FX):
             overlay.fill((*self.color,min(255,a)))
             scr.blit(overlay,(0,0))
 
-# --- Void Crystal (replaces golden cookie placeholder) ---
+# --- Void Crystal (now floating) ---
 class VoidCrystal(FX):
-    __slots__ = FX.__slots__ + ['lifetime']
+    __slots__ = FX.__slots__ + ['lifetime', 'vx', 'vy', 'angle']
     def __init__(self):
         super().__init__()
         self.lifetime = CRYSTAL_LIFETIME
@@ -859,7 +921,27 @@ class VoidCrystal(FX):
         self.init(x, y)
         self.life = self.max_life = self.lifetime
         self.color = (140, 0, 255)  # deep purple
+        self.vx = random.uniform(-30, 30)  # pixels per second
+        self.vy = random.uniform(-30, 30)
+        self.angle = random.uniform(0, 2*math.pi)
         return self
+    def update(self, dt):
+        # move
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        # boundary bounce
+        if self.x < 20 or self.x > WIDTH-20:
+            self.vx *= -0.9
+            self.x = max(20, min(WIDTH-20, self.x))
+        if self.y < 20 or self.y > HEIGHT-20:
+            self.vy *= -0.9
+            self.y = max(20, min(HEIGHT-20, self.y))
+        # slow down gradually
+        self.vx *= 0.99
+        self.vy *= 0.99
+        # rotate for visual effect
+        self.angle += 5 * dt
+        super().update(dt)
     def draw(self, scr):
         t = self.t()
         # pulsing size and glow
@@ -867,10 +949,10 @@ class VoidCrystal(FX):
         r = int(20 * pulse)
         # glow
         scr.blit(glow_surf(r*2, (140,0,255), t), (int(self.x)-r*2, int(self.y)-r*2), special_flags=pygame.BLEND_ADD)
-        # main crystal (a star shape)
+        # main crystal (a star shape) with rotation
         points = []
         for i in range(5):
-            angle = self.life * 2 + i * (2*math.pi/5)
+            angle = self.angle + i * (2*math.pi/5)
             points.append((self.x + math.cos(angle)*r, self.y + math.sin(angle)*r))
             angle += math.pi/5
             points.append((self.x + math.cos(angle)*r*0.5, self.y + math.sin(angle)*r*0.5))
@@ -975,6 +1057,35 @@ UPGRADE_DEFS = [
     U("Omega Singularity","x2.0 all power per level",1e36,10.0,2.0,1.0,"cosmic",WHITE,0),
     U("Eternity Gate","x2.5 ascension per level",1e44,14.0,2.5,1.0,"cosmic",GOLD,0),
     U("Infinity Core","x3.0 power per level",1e55,20.0,3.0,1.0,"cosmic",WHITE,0),
+
+    # ── NEW UPGRADES (scaling to trillions) ──
+    # Click
+    U("Mega Click", "x2 click power", 5e8, 1.6, 2, 1.02, "click", RED, 0),
+    U("Giga Click", "x3 click power", 1e13, 1.7, 3, 1.02, "click", MAGENTA, 0),
+    U("Tera Click", "x5 click power", 1e19, 1.8, 5, 1.01, "click", CYAN, 0),
+    # Auto
+    U("Auto Overdrive", "+50 auto clicks/sec", 1e12, 1.5, 50, 1.03, "auto", GREEN, 0),
+    U("Quantum Auto II", "auto clicks chain twice", 1e17, 1.6, 1, 1.02, "auto", BLUE, 0),
+    U("Nano Auto", "+200 auto clicks/sec", 1e22, 1.65, 200, 1.02, "auto", TEAL, 0),
+    # Chain
+    U("Chain Mastery", "+15% chain probability", 1e11, 1.4, 0.15, 1.0, "chain", ELECTRIC, 0),
+    U("Infinite Resonance", "chains can chain again", 1e18, 1.5, 1, 1.0, "chain", MAGENTA, 0),
+    # FX
+    U("Void Tendrils Upgrade", "tendrils +2, +50% size", 1e14, 1.5, 1.5, 1.0, "fx", VOID, 0),
+    U("Prism Mastery", "prism beams +2, thicker", 1e15, 1.5, 1.5, 1.0, "fx", PINK, 0),
+    U("Spiral Mastery", "spirals +2 arms, more particles", 1e16, 1.5, 1.5, 1.0, "fx", CYAN, 0),
+    # Amp
+    U("Particle Storm", "+100% particle count", 1e13, 1.5, 2.0, 1.0, "amp", YELLOW, 0),
+    U("Beam Amplifier", "+100% beam width", 1e15, 1.5, 2.0, 1.0, "amp", TEAL, 0),
+    # Mult
+    U("Energy Mult VII", "+200% energy per level", 1e12, 8.0, 3.0, 1.0, "mult", GOLD, 0),
+    U("Energy Mult VIII", "+500% energy per level", 1e20, 10.0, 6.0, 1.0, "mult", GOLD, 0),
+    # Cosmic
+    U("Cosmic Overlord", "x2 all power per level", 1e18, 12.0, 2.0, 1.0, "cosmic", MAGENTA, 0),
+    U("Galactic Core", "x3 all power per level", 1e27, 15.0, 3.0, 1.0, "cosmic", CYAN, 0),
+    # Combo
+    U("Combo Transcendence", "+10M combo per click", 1e15, 1.7, 10000000, 1.0, "combo", CYAN, 0),
+    U("Combo Infinity", "+100M combo per click", 1e20, 1.8, 100000000, 1.0, "combo", WHITE, 0),
 ]
 
 # Sort all upgrades by base cost
@@ -1149,10 +1260,13 @@ class Game:
         if self.has("Reality Tap"): mult *= self.upow("Reality Tap")
         if self.has("Omega Click"): mult *= self.upow("Omega Click")
         if self.has("Universe Engine"): mult *= self.upow("Universe Engine")
+        if self.has("Mega Click"): mult *= self.upow("Mega Click")
+        if self.has("Giga Click"): mult *= self.upow("Giga Click")
+        if self.has("Tera Click"): mult *= self.upow("Tera Click")
         combo_m = 1 + min(self.combo, 1000) * 0.005
         upgrade_mult = 1.0 + 0.01 * sum(u.level for u in self.upgrades)
         galaxy_m = 1.0 + self.galaxy_boost
-        return base * mult * combo_m * self.chaos_mult * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()   # <-- added fury
+        return base * mult * combo_m * self.chaos_mult * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()
     
     def energy_mult(self):
         m=1.0
@@ -1168,19 +1282,20 @@ class Game:
 
     def auto_cps(self):
         t = 0
-        for n in ["Auto Clicker","Rapid Fire","Machine Gun","Turbo Engine","Infinity Trigger"]:
+        for n in ["Auto Clicker","Rapid Fire","Machine Gun","Turbo Engine","Infinity Trigger","Auto Overdrive","Nano Auto"]:
             t += self.upow(n) * self.ulv(n)
         dim = self.upow("Dimension Fold") if self.has("Dimension Fold") else 1
         temp = self.upow("Temporal Clicker") * self.ulv("Temporal Clicker") if self.has("Temporal Clicker") else 0
         upgrade_mult = 1.0 + 0.01 * sum(u.level for u in self.upgrades)
         galaxy_m = 1.0 + self.galaxy_boost
-        return (t + temp) * self.chaos_mult * dim * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()   # <-- added fury
+        return (t + temp) * self.chaos_mult * dim * self.energy_mult() * self.crystal_mult * upgrade_mult * galaxy_m * self.fury()
 
     def chain_prob(self):
         b=0.0
         b+=self.upow("Chain Amplifier")*self.ulv("Chain Amplifier")
         b+=self.upow("Resonance Field")*self.ulv("Resonance Field")
         b+=self.upow("Echo Chamber")*self.ulv("Echo Chamber")*0.5
+        b+=self.upow("Chain Mastery")*self.ulv("Chain Mastery")
         return min(b, 0.5)
 
     def max_depth(self):
@@ -1193,6 +1308,7 @@ class Game:
         m=1.0
         if self.has("Particle Flood"): m*=self.upow("Particle Flood")
         if self.has("FX Overload"): m*=self.upow("FX Overload")
+        if self.has("Particle Storm"): m*=self.upow("Particle Storm")
         return min(m, 2.5)
 
     def explosion_scale(self):
@@ -1289,7 +1405,7 @@ class Game:
         if depth >= 0 and self.can_spawn() and random.random() < prob * 0.2 * up_mult("Starburst Emitter") * self.variety_factor:
             self._starburst(x, y, depth)
 
-        if depth >= 1 and self.can_spawn() and random.random() < prob * 0.4:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.4:
             ox = x + random.gauss(0, 40)
             oy = y + random.gauss(0, 40)
             self._explosion(ox, oy, depth, energy * 0.4 * sm)
@@ -1313,13 +1429,13 @@ class Game:
         if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Spiral Weaver") * self.variety_factor:
             self._spiral(x, y, depth)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Pulse Master") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Pulse Master") * self.variety_factor:
             self._pulse(x, y, depth)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Gravity Engine") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Gravity Engine") * self.variety_factor:
             self._gravity_well(x, y, depth)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Beam Storm") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Beam Storm") * self.variety_factor:
             ex = random.randint(20, self.game_w - 20)
             ey = random.randint(20, HEIGHT - 20)
             thick = 2 + int(self.upow("Beam Width") * self.ulv("Beam Width") * 1)
@@ -1327,17 +1443,17 @@ class Game:
             if random.random() < prob * 0.3:
                 self.chain(ex, ey, depth + 1, energy * 0.3)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Rift Opener") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Rift Opener") * self.variety_factor:
             length = 40 + int(self.upow("Rift Length") * self.ulv("Rift Length") * 20)
             self._rift(x, y, min(length, 80), depth)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Nova Core") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Nova Core") * self.variety_factor:
             self._nova(x, y, depth, energy * sm)
 
-        if depth >= 2 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Nebula Cloud") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.15 * up_mult("Nebula Cloud") * self.variety_factor:
             self._nebula(x, y, depth)
 
-        if depth >= 3 and self.can_spawn() and random.random() < prob * 0.12 * up_mult("Void Engine") * self.variety_factor:
+        if depth >= 0 and self.can_spawn() and random.random() < prob * 0.12 * up_mult("Void Engine") * self.variety_factor:
             self._blackhole(x, y, depth)
 
         # --- NEW FX SPAWNS (tied to respective upgrades) ---
@@ -1663,6 +1779,8 @@ class Game:
             if self.has("Combo Lord"): combo_gain += int(self.upow("Combo Lord") * self.ulv("Combo Lord"))
             if self.has("Combo God"): combo_gain += int(self.upow("Combo God") * self.ulv("Combo God"))
             if self.has("Combo Singularity"): combo_gain += int(self.upow("Combo Singularity") * self.ulv("Combo Singularity"))
+            if self.has("Combo Transcendence"): combo_gain += int(self.upow("Combo Transcendence") * self.ulv("Combo Transcendence"))
+            if self.has("Combo Infinity"): combo_gain += int(self.upow("Combo Infinity") * self.ulv("Combo Infinity"))
             
             self.combo += combo_gain
             self.combo_timer = self.combo_decay
@@ -2089,7 +2207,4 @@ class Game:
         pygame.quit(); sys.exit()
 
 if __name__=="__main__":
-
     Game().run()
-
-
