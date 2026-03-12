@@ -3,7 +3,7 @@
 ╔══════════════════════════════════════════════════════════════╗
 ║                       Cosmic Clicker                         ║
 ║        A Procedural Cosmic Fireworks Engine Disguised        ║
-║                    as a Clicker Game  v5                     ║
+║                    as a Clicker Game  v6                     ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Requirements: pip install pygame
@@ -793,58 +793,74 @@ class VoidTendrils(FX):
             scr.blit(glow_surf(12, self.color, t*0.8), (int(end_x)-12, int(end_y)-12), special_flags=pygame.BLEND_ADD)
 
 class PrismBeam(FX):
-    """A central beam that splits into colored beams (unlocked by Prism Emitter)."""
-    __slots__ = FX.__slots__ + ['beams', 'angle', 'length', 'particles']
+    """Rare epic explosion with rotating cosmic arms and particles."""
+    __slots__ = FX.__slots__ + ['arms','radius','angle','particles']
+
     def __init__(self):
         super().__init__()
-        self.beams = 3
+        self.arms = 6
+        self.radius = 120
         self.angle = 0
-        self.length = 60
         self.particles = []
-    def setup(self, x, y, beams=3, length=60, life=0.8, color=WHITE, depth=0):
-        self.init(x, y, depth)
-        self.beams = min(beams, 7)  # increased max
-        self.length = min(length, 100)
+
+    def setup(self, x, y, arms=6, radius=120, life=2.2, color=WHITE, depth=0):
+        self.init(x,y,depth)
+        self.arms = min(arms,10)
+        self.radius = radius
         self.life = self.max_life = life
         self.color = color
-        self.angle = random.uniform(0, 6.28)
-        # precompute particle positions
+        self.angle = random.uniform(0,6.28)
+
         self.particles = []
-        for i in range(self.beams):
-            beam_particles = []
-            base_angle = self.angle + i * (2*math.pi/self.beams)
-            for j in range(4):
-                t = j / 3.0
-                px = x + math.cos(base_angle) * self.length * t
-                py = y + math.sin(base_angle) * self.length * t
-                beam_particles.append((px, py))
-            self.particles.append(beam_particles)
+        for a in range(self.arms):
+            arm = []
+            for i in range(25):
+                f = i/24
+                arm.append([f, random.uniform(-0.4,0.4)])
+            self.particles.append(arm)
+
         return self
-    def update(self, dt):
-        self.angle += 4 * dt
-        t_factor = self.t()
-        for i in range(self.beams):
-            base_angle = self.angle + i * (2*math.pi/self.beams)
-            for j, (_, _) in enumerate(self.particles[i]):
-                t = j / 3.0
-                self.particles[i][j] = (self.x + math.cos(base_angle) * self.length * t_factor * t,
-                                         self.y + math.sin(base_angle) * self.length * t_factor * t)
+
+    def update(self,dt):
+        self.angle += 2.5*dt
         super().update(dt)
-    def draw(self, scr):
-        t = self.t()
-        pal = [RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PURPLE, MAGENTA, PINK]
-        for i in range(self.beams):
-            base_angle = self.angle + i * (2*math.pi/self.beams)
-            end_x = self.x + math.cos(base_angle) * self.length * t
-            end_y = self.y + math.sin(base_angle) * self.length * t
-            c = pal[i % len(pal)]
-            c = clamp_color((c[0]*t, c[1]*t, c[2]*t))
-            # draw particles along beam
-            for j, (px, py) in enumerate(self.particles[i]):
-                sz = max(1, int(4 * t * (1 - j/4)))
-                pygame.draw.circle(scr, c, (int(px), int(py)), sz)
-            # glow at tip
-            scr.blit(glow_surf(15, c, t*0.8), (int(end_x)-15, int(end_y)-15), special_flags=pygame.BLEND_ADD)
+
+    def draw(self,scr):
+        t=self.t()
+
+        for a in range(self.arms):
+
+            base_angle = self.angle + a*(6.28/self.arms)
+
+            for f,noise in self.particles[a]:
+
+                r = self.radius * f * t
+                ang = base_angle + f*6 + noise
+
+                px = self.x + math.cos(ang)*r
+                py = self.y + math.sin(ang)*r
+
+                size = max(1,int(6*(1-f)*t))
+
+                col = palette_sample(PAL_RAINBOW,f)
+                col = clamp_color((col[0]*t,col[1]*t,col[2]*t))
+
+                pygame.draw.circle(scr,col,(int(px),int(py)),size)
+
+                if f > 0.5:
+                    scr.blit(
+                        glow_surf(10,col,t*0.6),
+                        (int(px)-10,int(py)-10),
+                        special_flags=pygame.BLEND_ADD
+                    )
+
+        # center pulse
+        r=int(40*t)
+        scr.blit(
+            glow_surf(r,self.color,t),
+            (int(self.x-r),int(self.y-r)),
+            special_flags=pygame.BLEND_ADD
+        )
 
 class GalacticSwirl(FX):
     """A rotating spiral of particles (unlocked by Spiral Weaver)."""
