@@ -54,7 +54,12 @@ MAX_FX = 800               # comfortable limit
 MAX_SPAWN = 40               # increased slightly for variety
 CHAIN_DECAY = 0.78
 
-SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hyper_save.json")
+if getattr(sys, 'frozen', False):
+    base_path = os.path.dirname(sys.executable)
+else:
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+SAVE_FILE = os.path.join(base_path, "hyper_save.json")
 
 # Void Crystal settings (replaces golden cookie placeholder)
 CRYSTAL_SPAWN_MIN = 30        # seconds
@@ -1093,15 +1098,9 @@ UPGRADE_DEFS = [
     # Amp
     U("Particle Storm", "+100% particle count", 1e13, 1.5, 2.0, 1.0, "amp", YELLOW, 0),
     U("Beam Amplifier", "+100% beam width", 1e15, 1.5, 2.0, 1.0, "amp", TEAL, 0),
-    # Mult
-    U("Energy Mult VII", "+200% energy per level", 1e12, 8.0, 3.0, 1.0, "mult", GOLD, 0),
-    U("Energy Mult VIII", "+500% energy per level", 1e20, 10.0, 6.0, 1.0, "mult", GOLD, 0),
     # Cosmic
     U("Cosmic Overlord", "x2 all power per level", 1e18, 12.0, 2.0, 1.0, "cosmic", MAGENTA, 0),
     U("Galactic Core", "x3 all power per level", 1e27, 15.0, 3.0, 1.0, "cosmic", CYAN, 0),
-    # Combo
-    U("Combo Transcendence", "+10M combo per click", 1e15, 1.7, 10000000, 1.0, "combo", CYAN, 0),
-    U("Combo Infinity", "+100M combo per click", 1e20, 1.8, 100000000, 1.0, "combo", WHITE, 0),
 ]
 
 # Sort all upgrades by base cost
